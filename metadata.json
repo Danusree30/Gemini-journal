@@ -1,0 +1,6 @@
+{
+  "name": "Gemini Journal",
+  "description": "A production-grade, secure AI journal with offline synchronization, multi-turn Gemini reflections, custom color studios, and private codelock.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
