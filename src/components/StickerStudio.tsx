@@ -434,6 +434,7 @@ export const StickerStudio: React.FC<StickerStudioProps> = ({
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
+              id="sticker-search-input"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -443,7 +444,7 @@ export const StickerStudio: React.FC<StickerStudioProps> = ({
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -777,6 +778,7 @@ export const StickerStudio: React.FC<StickerStudioProps> = ({
                   Sticker Name <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  id="custom-sticker-name"
                   type="text"
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
@@ -809,6 +811,7 @@ export const StickerStudio: React.FC<StickerStudioProps> = ({
                   Optional Description
                 </label>
                 <input
+                  id="custom-sticker-desc"
                   type="text"
                   value={customDescription}
                   onChange={(e) => setCustomDescription(e.target.value)}
@@ -849,6 +852,7 @@ export const StickerStudio: React.FC<StickerStudioProps> = ({
             </h3>
             <form onSubmit={handleCreateCollection} className="space-y-3">
               <input
+                id="new-collection-name"
                 type="text"
                 value={newCollectionName}
                 onChange={(e) => setNewCollectionName(e.target.value)}

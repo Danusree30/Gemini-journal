@@ -42,6 +42,7 @@ const MainApp: React.FC = () => {
   const [activeEntry, setActiveEntry] = useState<JournalEntry>(createDefaultEntry());
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
   const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [isHistoryUnlocked, setIsHistoryUnlocked] = useState<boolean>(false);
   const [isReminderOpen, setIsReminderOpen] = useState(false);
 
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -99,6 +100,7 @@ const MainApp: React.FC = () => {
 
     inactivityTimerRef.current = setTimeout(() => {
       setIsLocked(true);
+      setIsHistoryUnlocked(false);
     }, settings.autoLockMinutes * 60 * 1000);
   }, [settings.codelockEnabled, settings.autoLockMinutes]);
 
@@ -119,6 +121,28 @@ const MainApp: React.FC = () => {
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     };
   }, [settings.codelockEnabled, resetInactivityTimer]);
+
+  // Tab change handler with history auto-lock support
+  const handleTabChange = (
+    newTab: 'editor' | 'history' | 'insights' | 'themes' | 'stickers' | 'privacy'
+  ) => {
+    // Re-lock history whenever leaving the history tab
+    if (activeTab === 'history' && newTab !== 'history') {
+      if (settings.autoLockHistoryOnLeave !== false) {
+        setIsHistoryUnlocked(false);
+      }
+    }
+    // Also re-lock when switching into history if auto-lock on leave is active
+    if (newTab === 'history' && activeTab !== 'history' && settings.autoLockHistoryOnLeave !== false) {
+      setIsHistoryUnlocked(false);
+    }
+    setActiveTab(newTab);
+  };
+
+  const handleManualLock = () => {
+    setIsLocked(true);
+    setIsHistoryUnlocked(false);
+  };
 
   // Create new journal entry
   const handleNewEntry = () => {
@@ -177,7 +201,7 @@ const MainApp: React.FC = () => {
       emoji: sticker.emoji,
       x: 15 + Math.random() * 60,
       y: 15 + Math.random() * 60,
-      rotation: -12 + Math.random() * 24,
+      rotation: 0,
     };
     const updated = {
       ...activeEntry,
@@ -230,11 +254,12 @@ const MainApp: React.FC = () => {
       {/* Top Application Header */}
       <Header
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         syncStatus={syncStatus}
         onNewEntry={handleNewEntry}
-        onManualLock={() => setIsLocked(true)}
+        onManualLock={handleManualLock}
         onOpenReminderModal={() => setIsReminderOpen(true)}
+        isHistoryLocked={!isHistoryUnlocked}
       />
 
       {/* Main Content Area */}
@@ -257,6 +282,10 @@ const MainApp: React.FC = () => {
             onTogglePin={handleTogglePin}
             onToggleArchive={handleToggleArchive}
             onDeleteEntry={handleDeleteEntry}
+            isUnlocked={isHistoryUnlocked}
+            onUnlock={() => setIsHistoryUnlocked(true)}
+            onLock={() => setIsHistoryUnlocked(false)}
+            onNavigateToPrivacy={() => setActiveTab('privacy')}
           />
         )}
 

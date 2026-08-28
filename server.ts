@@ -46,9 +46,12 @@ function getGeminiClient(): GoogleGenAI {
 const MODEL_LADDER = [
   "gemini-3.6-flash",
   "gemini-3.1-flash-lite",
-  "gemini-3.7-flash",
   "gemini-flash-latest",
+  "gemini-3.7-flash",
 ];
+
+// In-memory model cooldown tracking to prioritize healthy models when quota limits (429) occur
+const modelCooldownMap = new Map<string, number>();
 
 async function generateContentWithFallback(
   contents: string | Array<{ role?: string; parts?: Array<{ text: string }> }>,
@@ -57,8 +60,16 @@ async function generateContentWithFallback(
 ): Promise<string> {
   const ai = getGeminiClient();
   let lastError: any = null;
+  const now = Date.now();
 
-  for (const model of MODEL_LADDER) {
+  // Prioritize models that are not currently under a 429 quota cooldown
+  const sortedLadder = [...MODEL_LADDER].sort((a, b) => {
+    const aCooldown = (modelCooldownMap.get(a) || 0) > now ? 1 : 0;
+    const bCooldown = (modelCooldownMap.get(b) || 0) > now ? 1 : 0;
+    return aCooldown - bCooldown;
+  });
+
+  for (const model of sortedLadder) {
     try {
       const response = await ai.models.generateContent({
         model,
@@ -70,14 +81,32 @@ async function generateContentWithFallback(
       });
 
       if (response && response.text) {
+        // Clear cooldown upon successful response
+        modelCooldownMap.delete(model);
         return response.text;
       }
     } catch (err: any) {
       lastError = err;
-      const status = err?.status || err?.code || 500;
-      console.warn(`[Gemini Fallback] Model ${model} failed with status ${status}. Trying next fallback...`);
+      const rawStatus = err?.status ?? err?.code ?? err?.statusCode;
+      const statusNum = typeof rawStatus === "number" ? rawStatus : parseInt(String(rawStatus), 10);
+      const is429 = statusNum === 429 || /resource_exhausted|quota|429/i.test(err?.message || "");
+
+      if (is429) {
+        // Cooldown this model for 90s so subsequent requests prioritize alternate fallback models
+        modelCooldownMap.set(model, now + 90000);
+      }
+
+      console.log(`[Gemini Fallback] Model ${model} returned ${rawStatus || 'status'} (${err?.message?.slice(0, 80)}...). Proceeding to next model...`);
+
       // Retry on standard transient or recoverable status codes
-      if ([404, 429, 500, 503].includes(status) || err?.message?.includes("not found") || err?.message?.includes("overloaded") || err?.message?.includes("demand")) {
+      const isRecoverable =
+        is429 ||
+        statusNum === 404 ||
+        statusNum === 500 ||
+        statusNum === 503 ||
+        /not found|overloaded|demand|unavailable|resource_exhausted|quota/i.test(err?.message || "");
+
+      if (isRecoverable) {
         continue;
       }
     }
@@ -372,6 +401,7 @@ Provide 4-5 introspective coaching questions for deeper self-reflection.`;
     res.status(500).json({ error: "Unable to generate questions at this moment." });
   }
 });
+
 
 // Vite Integration / Static Serving
 async function startServer() {

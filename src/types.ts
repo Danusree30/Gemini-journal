@@ -86,6 +86,8 @@ export interface UserSettings {
   codelockPinHash?: string;
   codelockSalt?: string;
   autoLockMinutes: number; // 0 for instant on blur, 1, 5, 15, 30
+  historyPinLockEnabled?: boolean; // PIN lock protection for History page
+  autoLockHistoryOnLeave?: boolean; // automatically re-lock History when navigating away
   activeThemeId: string;
   customThemes: CustomTheme[];
   seasonalThemeEnabled: boolean;
@@ -148,3 +150,4 @@ export interface InsightsMetrics {
   categoryCounts: Record<string, number>;
   activityDays: Record<string, number>; // YYYY-MM-DD -> count
 }
+

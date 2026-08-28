@@ -48,7 +48,7 @@ export const AiAssistantPanel: React.FC<AiAssistantPanelProps> = ({
   onReplaceContent,
   onUpdateTitle,
 }) => {
-  const { palette } = useTheme();
+  const { palette, settings } = useTheme();
   const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'tools' | 'chat' | 'summary'>('tools');
@@ -530,6 +530,7 @@ export const AiAssistantPanel: React.FC<AiAssistantPanelProps> = ({
             className="p-3 border-t border-slate-100 bg-slate-50/80 flex items-center gap-2"
           >
             <input
+              id="ai-chat-input"
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
@@ -540,7 +541,7 @@ export const AiAssistantPanel: React.FC<AiAssistantPanelProps> = ({
             <button
               type="submit"
               disabled={!chatInput.trim() || isSendingChat}
-              className="p-2 rounded-xl text-white transition-transform hover:scale-105 cursor-pointer disabled:opacity-50"
+              className="p-2 rounded-xl text-white transition-transform hover:scale-105 cursor-pointer disabled:opacity-50 shrink-0"
               style={{ backgroundColor: palette.buttonPrimary }}
             >
               <Send className="w-3.5 h-3.5" />

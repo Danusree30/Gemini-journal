@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Filter,
@@ -17,9 +17,16 @@ import {
   ArrowUpDown,
   X,
   Plus,
+  Lock,
+  Unlock,
+  Shield,
+  KeyRound,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { JournalEntry } from '../types';
 import { useTheme } from '../lib/themeContext';
+import { verifyPin, hashPin, generateSalt } from '../lib/crypto';
 
 interface JournalHistoryProps {
   entries: JournalEntry[];
@@ -29,6 +36,10 @@ interface JournalHistoryProps {
   onTogglePin: (entry: JournalEntry) => void;
   onToggleArchive: (entry: JournalEntry) => void;
   onDeleteEntry: (entryId: string) => void;
+  isUnlocked?: boolean;
+  onUnlock?: () => void;
+  onLock?: () => void;
+  onNavigateToPrivacy?: () => void;
 }
 
 export const JournalHistory: React.FC<JournalHistoryProps> = ({
@@ -39,8 +50,155 @@ export const JournalHistory: React.FC<JournalHistoryProps> = ({
   onTogglePin,
   onToggleArchive,
   onDeleteEntry,
+  isUnlocked,
+  onUnlock,
+  onLock,
+  onNavigateToPrivacy,
 }) => {
-  const { palette } = useTheme();
+  const { palette, settings, updateSettings } = useTheme();
+
+  // PIN lock management
+  const [localUnlocked, setLocalUnlocked] = useState<boolean>(false);
+  const isVaultUnlocked = isUnlocked !== undefined ? isUnlocked : localUnlocked;
+
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  // Setup PIN state when no PIN is configured yet
+  const [setupPin, setSetupPin] = useState('');
+  const [confirmSetupPin, setConfirmSetupPin] = useState('');
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [isSavingPin, setIsSavingPin] = useState(false);
+
+  const hasConfiguredPin = Boolean(settings.codelockPinHash && settings.codelockSalt);
+
+  const handleUnlockVault = () => {
+    setLocalUnlocked(true);
+    onUnlock?.();
+  };
+
+  const handleLockVault = () => {
+    setLocalUnlocked(false);
+    setEnteredPin('');
+    setPinError(null);
+    onLock?.();
+  };
+
+  const checkPin = async (candidate: string) => {
+    if (!settings.codelockSalt || !settings.codelockPinHash) return;
+    setIsVerifying(true);
+    setPinError(null);
+    try {
+      const isValid = await verifyPin(candidate, settings.codelockSalt, settings.codelockPinHash);
+      if (isValid) {
+        setPinError(null);
+        setEnteredPin('');
+        handleUnlockVault();
+      } else {
+        setPinError('Incorrect PIN. Please try again.');
+        setTimeout(() => {
+          setEnteredPin('');
+        }, 500);
+      }
+    } catch {
+      setPinError('Error verifying PIN. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleDigit = (digit: string) => {
+    if (enteredPin.length >= 6) return;
+    setPinError(null);
+    const next = enteredPin + digit;
+    setEnteredPin(next);
+
+    if (next.length >= 4 && settings.codelockSalt && settings.codelockPinHash) {
+      verifyPin(next, settings.codelockSalt, settings.codelockPinHash).then((valid) => {
+        if (valid) {
+          setPinError(null);
+          setEnteredPin('');
+          handleUnlockVault();
+        } else if (next.length === 6) {
+          setPinError('Incorrect PIN. Please try again.');
+          setTimeout(() => setEnteredPin(''), 500);
+        }
+      });
+    }
+  };
+
+  const handleBackspace = () => {
+    setPinError(null);
+    setEnteredPin((prev) => prev.slice(0, -1));
+  };
+
+  const handleClear = () => {
+    setPinError(null);
+    setEnteredPin('');
+  };
+
+  // Keyboard listener for PIN lock
+  useEffect(() => {
+    if (isVaultUnlocked || !hasConfiguredPin) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        handleDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClear();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (enteredPin.length >= 4) {
+          checkPin(enteredPin);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isVaultUnlocked, hasConfiguredPin, enteredPin, settings.codelockSalt, settings.codelockPinHash]);
+
+  const handleCreatePin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSetupError(null);
+
+    if (!/^\d{4,6}$/.test(setupPin)) {
+      setSetupError('PIN must be 4 to 6 numeric digits.');
+      return;
+    }
+    if (setupPin !== confirmSetupPin) {
+      setSetupError('PINs do not match. Please verify.');
+      return;
+    }
+
+    setIsSavingPin(true);
+    try {
+      const salt = generateSalt();
+      const hash = await hashPin(setupPin, salt);
+      await updateSettings({
+        codelockEnabled: true,
+        codelockPinHash: hash,
+        codelockSalt: salt,
+        historyPinLockEnabled: true,
+      });
+      setSetupPin('');
+      setConfirmSetupPin('');
+      handleUnlockVault();
+    } catch {
+      setSetupError('Failed to save security PIN. Please try again.');
+    } finally {
+      setIsSavingPin(false);
+    }
+  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'pinned' | 'favorites' | 'archived' | 'summaries'>('all');
@@ -130,26 +288,267 @@ ${entry.summary ? `\n\n---\n## AI Summary\n\n${entry.summary}` : ''}
     URL.revokeObjectURL(url);
   };
 
+  // If the Vault is locked, display the secure PIN lock screen
+  if (!isVaultUnlocked) {
+    if (hasConfiguredPin) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-md mx-auto w-full my-auto animate-in fade-in">
+          <div
+            className={`w-full bg-white rounded-3xl p-8 shadow-xl border border-pink-100/80 flex flex-col items-center text-center transition-transform ${
+              pinError ? 'animate-shake' : ''
+            }`}
+          >
+            {/* Vault Shield & Lock Icon */}
+            <div className="relative mb-4">
+              <div
+                className="w-16 h-16 rounded-3xl flex items-center justify-center text-white text-2xl font-bold shadow-md"
+                style={{ backgroundColor: palette.accent }}
+              >
+                <Shield className="w-8 h-8" />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                <Lock className="w-3.5 h-3.5" />
+              </div>
+            </div>
+
+            <h2 className="text-lg font-bold text-slate-800 tracking-tight">
+              Journal History Vault
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 mb-6 max-w-xs leading-relaxed">
+              Your previous reflections, memories, and archives are protected. Enter your PIN to view.
+            </p>
+
+            {/* Masked PIN Dots Indicator */}
+            <div className="flex items-center gap-3 mb-6">
+              {[0, 1, 2, 3, 4, 5].map((idx) => (
+                <div
+                  key={idx}
+                  className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+                    enteredPin.length > idx
+                      ? pinError
+                        ? 'bg-rose-500 scale-110 shadow-xs'
+                        : 'bg-purple-600 scale-110 shadow-xs'
+                      : 'bg-slate-200'
+                  }`}
+                />
+              ))}
+            </div>
+
+            {pinError && (
+              <p className="text-xs text-rose-500 font-bold mb-4 flex items-center gap-1.5 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{pinError}</span>
+              </p>
+            )}
+
+            {isVerifying && (
+              <p className="text-xs text-purple-600 font-medium mb-3 animate-pulse">
+                Verifying PIN security...
+              </p>
+            )}
+
+            {/* Keypad */}
+            <div className="grid grid-cols-3 gap-2.5 w-full max-w-[240px] mb-4">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                <button
+                  key={digit}
+                  onClick={() => handleDigit(digit)}
+                  className="h-12 rounded-2xl bg-slate-50 hover:bg-purple-50 text-slate-800 hover:text-purple-700 text-lg font-bold transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center justify-center border border-slate-100"
+                >
+                  {digit}
+                </button>
+              ))}
+              <button
+                onClick={handleClear}
+                className="h-12 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center justify-center border border-slate-100"
+                title="Clear entered digits"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => handleDigit('0')}
+                className="h-12 rounded-2xl bg-slate-50 hover:bg-purple-50 text-slate-800 hover:text-purple-700 text-lg font-bold transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center justify-center border border-slate-100"
+              >
+                0
+              </button>
+              <button
+                onClick={handleBackspace}
+                title="Backspace"
+                className="h-12 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-base font-semibold transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center justify-center border border-slate-100"
+              >
+                ⌫
+              </button>
+            </div>
+
+            {/* Unlock Button */}
+            {enteredPin.length >= 4 && (
+              <button
+                onClick={() => checkPin(enteredPin)}
+                className="w-full max-w-[240px] py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition-transform hover:scale-102 active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                <span>Unlock Vault</span>
+              </button>
+            )}
+
+            {/* Footer options */}
+            <div className="mt-6 pt-4 border-t border-slate-100 w-full flex justify-center">
+              {onNavigateToPrivacy && (
+                <button
+                  onClick={onNavigateToPrivacy}
+                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-purple-600 font-medium transition-colors cursor-pointer"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Manage or reset PIN in Security Center</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // No PIN configured yet: Show Setup PIN view so user can configure PIN lock directly!
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-md mx-auto w-full my-auto animate-in fade-in">
+        <div className="w-full bg-white rounded-3xl p-8 shadow-xl border border-pink-100/80 flex flex-col items-center text-center">
+          <div className="w-16 h-16 rounded-3xl bg-purple-50 text-purple-600 flex items-center justify-center mb-4 shadow-sm">
+            <KeyRound className="w-8 h-8" />
+          </div>
+
+          <h2 className="text-lg font-bold text-slate-800 tracking-tight">
+            Protect History with a PIN
+          </h2>
+          <p className="text-xs text-slate-500 mt-1 mb-6 max-w-xs leading-relaxed">
+            Set a 4-6 digit numeric security PIN to lock your personal journal history and reflections.
+          </p>
+
+          <form onSubmit={handleCreatePin} className="w-full space-y-3">
+            <div className="space-y-2.5">
+              <input
+                type="password"
+                maxLength={6}
+                value={setupPin}
+                onChange={(e) => setSetupPin(e.target.value)}
+                placeholder="Enter 4-6 Digit PIN"
+                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white text-center tracking-widest font-mono text-slate-800"
+              />
+              <input
+                type="password"
+                maxLength={6}
+                value={confirmSetupPin}
+                onChange={(e) => setConfirmSetupPin(e.target.value)}
+                placeholder="Confirm PIN"
+                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white text-center tracking-widest font-mono text-slate-800"
+              />
+            </div>
+
+            {setupError && (
+              <p className="text-xs text-rose-500 font-bold flex items-center justify-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" />
+                {setupError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSavingPin}
+              className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition-transform hover:scale-102 active:scale-98 cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>{isSavingPin ? 'Securing Vault...' : 'Set PIN & Unlock History'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleUnlockVault}
+              className="w-full py-2 text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors cursor-pointer"
+            >
+              Browse without PIN for now
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 flex flex-col min-h-0 overflow-y-auto space-y-6">
       {/* Header & Search Bar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-            <span>Journal Archive & Search</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-700 font-semibold">
-              {filteredEntries.length} entries
-            </span>
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Privately browse, search, and reflect over all your previous memories
-          </p>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+              <span>Journal Archive & Search</span>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-700 font-semibold">
+                {filteredEntries.length} entries
+              </span>
+            </h1>
+
+            {hasConfiguredPin ? (
+              <button
+                onClick={handleLockVault}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                title="Lock Journal History now"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Lock History</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleLockVault}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                title="Set PIN to protect History"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                <span>Set PIN Lock</span>
+              </button>
+            )}
+
+            {onNavigateToPrivacy && (
+              <button
+                onClick={onNavigateToPrivacy}
+                className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition-colors cursor-pointer"
+                title="Manage PIN in Security Center"
+              >
+                <KeyRound className="w-3 h-3 text-slate-500" />
+                <span>PIN Settings</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-slate-500">
+              Privately browse, search, and reflect over all your previous memories
+            </p>
+            {hasConfiguredPin ? (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-medium">
+                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                PIN Guard Active
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 font-medium">
+                <AlertCircle className="w-3 h-3 text-amber-500" />
+                PIN Not Configured
+              </span>
+            )}
+            <label className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer select-none ml-2">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.autoLockHistoryOnLeave)}
+                onChange={(e) => updateSettings({ autoLockHistoryOnLeave: e.target.checked })}
+                className="rounded text-purple-600 focus:ring-purple-500 h-3.5 w-3.5 cursor-pointer"
+              />
+              <span>Re-lock on tab switch</span>
+            </label>
+          </div>
         </div>
 
         {/* Search Input */}
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
+            id="history-search-input"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -159,13 +558,36 @@ ${entry.summary ? `\n\n---\n## AI Summary\n\n${entry.summary}` : ''}
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
+
+      {/* PIN Security Notice Banner when unconfigured */}
+      {!hasConfiguredPin && (
+        <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-bold text-amber-950">Secure Your History with a PIN</p>
+              <p className="text-[11px] text-amber-800">
+                You are currently viewing history without PIN lock protection. Set a 4-6 digit numeric PIN to keep your past thoughts confidential.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleLockVault}
+            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs transition-transform hover:scale-102 active:scale-98 cursor-pointer shrink-0 self-start sm:self-auto"
+          >
+            Configure PIN Now
+          </button>
+        </div>
+      )}
 
       {/* Filter Tabs & View Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200/70">

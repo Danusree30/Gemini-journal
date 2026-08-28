@@ -400,7 +400,7 @@ Walk through these verification cases to validate all user-facing and backend fu
 | :--- | :--- | :--- | :--- |
 | **TC-01** | **Authentication** | Click **"Sign In with Google"** on the landing view. | Google popup opens; upon authorization, user session initializes and personal journals load instantly. |
 | **TC-02** | **Journal Writing & Autosave** | Type title, body paragraphs, and pick a mood emoji. | Real-time status indicator transitions from *"Saving..."* to *"Saved"* with zero UI freeze. |
-| **TC-03** | **Canvas Stickers** | Click **Stickers**, choose an emoji sticker, drag it across the page, click rotate (`↻`). | Sticker floats on canvas, follows drag coordinates, and persists in both the entry and sticker tray. |
+| **TC-03** | **Canvas Stickers** | Click **Stickers**, choose an emoji sticker, drag it across the page, click rotate (`↻`). | Sticker is placed in a perfectly straight, upright (0°) orientation, follows drag coordinates, and persists cleanly in the entry. |
 | **TC-04** | **AI Reflection** | In the right-hand panel, click **"Reflect with Gemini"**. | Express backend calls Gemini; displays an empathetic Markdown card with thoughtful questions. |
 | **TC-05** | **Multi-Turn AI Chat** | In the AI Companion tab, send a question about your journal. | Gemini answers in context of your current journal entry and persists the message history. |
 | **TC-06** | **AI Summarization** | In the AI Companion tab, click **"Generate Structured Summary"**. | Generates a 4-part summary (Summary, Key Takeaways, Action Items, Reflection Question). |
@@ -409,6 +409,9 @@ Walk through these verification cases to validate all user-facing and backend fu
 | **TC-09** | **14-Day Rhythm & Insights** | Navigate to the **Insights** tab. | Current weekday (e.g. Thursday) shows exact entry count with "Today" badge, streaks, and top stickers. |
 | **TC-10** | **JSON Backup Export** | In **Security Center**, click **"Export All Entries (JSON)"**. | Downloads a complete, structured JSON backup file of all user entries, timestamps, tags, and stickers. |
 | **TC-11** | **Zero-Trust Data Purge** | In **Security Center**, click **"Permanently Purge All Data"**. | Confirms dialog and securely deletes all documents under `/users/{userId}` in Cloud Firestore. |
+| **TC-12** | **History Page PIN Vault** | Click **"History & Search"** tab with PIN configured. | Journal history is locked behind the secure PIN keypad. Entering incorrect PIN shakes and shows error; entering valid PIN unlocks history and archives. |
+| **TC-13** | **History Re-Lock & Auto-Lock** | Click **"Lock History"** in history header or switch tabs with "Re-lock on tab switch" checked. | Journal history immediately re-locks, masking all past memories until the PIN is verified again. |
+| **TC-14** | **Sticker Straight Alignment & Straighten All** | Click **"Straighten All"** in the Adorned Stickers ribbon or the straighten icon (`⟲`) on any sticker. | Stickers immediately snap straight to 0° upright orientation with zero tilt or distortion. |
 
 ---
 

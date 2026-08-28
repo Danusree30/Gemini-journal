@@ -29,6 +29,7 @@ interface HeaderProps {
   onNewEntry: () => void;
   onManualLock: () => void;
   onOpenReminderModal: () => void;
+  isHistoryLocked?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,6 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNewEntry,
   onManualLock,
   onOpenReminderModal,
+  isHistoryLocked = false,
 }) => {
   const { user, signOut } = useAuth();
   const { palette, settings } = useTheme();
@@ -135,6 +137,14 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <History className="w-3.5 h-3.5 text-purple-500" />
             <span>History & Search</span>
+            {isHistoryLocked && (
+              <span
+                title="History Archive Vault is PIN Locked"
+                className="p-0.5 rounded bg-purple-100 text-purple-700 inline-flex items-center"
+              >
+                <Lock className="w-2.5 h-2.5" />
+              </span>
+            )}
           </button>
 
           <button
@@ -299,11 +309,18 @@ export const Header: React.FC<HeaderProps> = ({
 
         <button
           onClick={() => setActiveTab('history')}
-          className={`flex flex-col items-center gap-0.5 ${
+          className={`flex flex-col items-center gap-0.5 relative ${
             activeTab === 'history' ? 'text-purple-600 font-bold' : ''
           }`}
         >
-          <History className="w-4 h-4" />
+          <div className="relative">
+            <History className="w-4 h-4" />
+            {isHistoryLocked && (
+              <span className="absolute -top-1 -right-1 p-0.5 rounded-full bg-purple-600 text-white shadow-xs">
+                <Lock className="w-2 h-2" />
+              </span>
+            )}
+          </div>
           <span>History</span>
         </button>
 

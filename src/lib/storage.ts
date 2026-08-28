@@ -42,6 +42,8 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   codelockPinHash: '',
   codelockSalt: '',
   autoLockMinutes: 5,
+  historyPinLockEnabled: true,
+  autoLockHistoryOnLeave: true,
   activeThemeId: 'sakura',
   customThemes: [],
   seasonalThemeEnabled: true,

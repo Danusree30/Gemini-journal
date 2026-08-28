@@ -12,7 +12,6 @@ import {
   Check,
   Calendar,
   Layers,
-  ChevronRight,
   Maximize2,
   Minimize2,
   Share2,
@@ -21,6 +20,7 @@ import {
   Plus,
   Search,
   RotateCw,
+  RotateCcw,
   Move,
   Palette,
 } from 'lucide-react';
@@ -56,7 +56,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   onDeleteEntry,
   syncStatus,
 }) => {
-  const { palette, settings } = useTheme();
+  const { palette, settings, updateSettings } = useTheme();
   const { user } = useAuth();
 
   const [isSaving, setIsSaving] = useState(false);
@@ -68,6 +68,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [customStickers, setCustomStickers] = useState<StickerItem[]>([]);
   const [newTagInput, setNewTagInput] = useState('');
   const [aiPanelOpen, setAiPanelOpen] = useState(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
 
   // Scrapbook Mode State
   const [scrapbookMode, setScrapbookMode] = useState(false);
@@ -188,6 +190,26 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     });
   };
 
+
+
+  // Auto-straighten any stickers that have legacy or crooked angles
+  useEffect(() => {
+    if (activeEntry.stickers && activeEntry.stickers.length > 0) {
+      const hasCrookedStickers = activeEntry.stickers.some(
+        (s) => typeof s.rotation === 'number' && s.rotation !== 0 && s.rotation % 90 !== 0
+      );
+      if (hasCrookedStickers) {
+        updateField(
+          'stickers',
+          activeEntry.stickers.map((s) => ({
+            ...s,
+            rotation: 0,
+          }))
+        );
+      }
+    }
+  }, [activeEntry.stickers]);
+
   // Add a tag
   const handleAddTag = (e: React.KeyboardEvent | React.MouseEvent) => {
     if ('key' in e && e.key !== 'Enter' && e.key !== ',') return;
@@ -207,16 +229,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     );
   };
 
-  // Add decorative sticker to journal
+  // Add decorative sticker to journal in upright straight position (0deg)
   const handleAddSticker = (stickerItem: StickerItem) => {
     const newSticker: StickerPlacement = {
       id: `stk_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       stickerId: stickerItem.id,
       name: stickerItem.name,
       emoji: stickerItem.emoji,
-      x: 15 + Math.random() * 60,
-      y: 15 + Math.random() * 60,
-      rotation: -12 + Math.random() * 24,
+      x: 20 + Math.random() * 50,
+      y: 20 + Math.random() * 50,
+      rotation: 0,
     };
     const current = activeEntry.stickers || [];
     updateField('stickers', [...current, newSticker]);
@@ -234,7 +256,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     }
   };
 
-  // Rotate sticker
+  // Rotate sticker in clean 90-degree cardinal steps (0° -> 90° -> 180° -> 270° -> 0°)
   const handleRotateSticker = (stickerPlacementId: string) => {
     const current = activeEntry.stickers || [];
     updateField(
@@ -242,10 +264,29 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       current.map((s) => {
         if (s.id === stickerPlacementId) {
           const currentRot = s.rotation || 0;
-          return { ...s, rotation: (currentRot + 20) % 360 };
+          const nextRot = (Math.round(currentRot / 90) * 90 + 90) % 360;
+          return { ...s, rotation: nextRot };
         }
         return s;
       })
+    );
+  };
+
+  // Straighten single sticker directly to 0 degrees
+  const handleStraightenSticker = (stickerPlacementId: string) => {
+    const current = activeEntry.stickers || [];
+    updateField(
+      'stickers',
+      current.map((s) => (s.id === stickerPlacementId ? { ...s, rotation: 0 } : s))
+    );
+  };
+
+  // Straighten all stickers on active journal entry to 0 degrees
+  const handleStraightenAllStickers = () => {
+    const current = activeEntry.stickers || [];
+    updateField(
+      'stickers',
+      current.map((s) => ({ ...s, rotation: 0 }))
     );
   };
 
@@ -306,6 +347,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       updateField('tags', Array.from(new Set([...activeEntry.tags, ...template.defaultTags])));
     }
   };
+
+
 
   // Active paper class
   const activePaperClass = useMemo(() => {
@@ -635,9 +678,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     }}
                     onDoubleClick={(e) => {
                       e.stopPropagation();
-                      handleRotateSticker(stk.id);
+                      if (stk.rotation && stk.rotation !== 0) {
+                        handleStraightenSticker(stk.id);
+                      } else {
+                        handleRotateSticker(stk.id);
+                      }
                     }}
-                    title={`${stk.name || 'Sticker'} (Double-click to rotate, drag to move)`}
+                    title={`${stk.name || 'Sticker'} (Double-click to straighten/rotate, drag to move)`}
                     style={{
                       left: `${stk.x ?? 50}%`,
                       top: `${stk.y ?? 40}%`,
@@ -659,12 +706,24 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <span className="max-w-[70px] truncate">{stk.name || 'Sticker'}</span>
+                      {stk.rotation !== 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStraightenSticker(stk.id);
+                          }}
+                          title="Reset to Straight Position (0°)"
+                          className="hover:text-emerald-300 p-0.5 cursor-pointer"
+                        >
+                          <RotateCcw className="w-2.5 h-2.5" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRotateSticker(stk.id);
                         }}
-                        title="Rotate Sticker (+20°)"
+                        title="Rotate (+90°)"
                         className="hover:text-amber-300 p-0.5 cursor-pointer"
                       >
                         <RotateCw className="w-2.5 h-2.5" />
@@ -693,6 +752,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
           {/* Title Input */}
           <input
+            id="journal-title-input"
             type="text"
             value={activeEntry.title}
             onChange={(e) => updateField('title', e.target.value)}
@@ -726,6 +786,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
             <div className="inline-flex items-center">
               <input
+                id="journal-tag-input"
                 type="text"
                 value={newTagInput}
                 onChange={(e) => setNewTagInput(e.target.value)}
@@ -743,6 +804,14 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 <Smile className="w-3.5 h-3.5 text-purple-600" />
                 <span>Adorned Stickers ({activeEntry.stickers.length}):</span>
               </div>
+              <button
+                onClick={handleStraightenAllStickers}
+                title="Reset all stickers to straight position (0°)"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-white border border-purple-200 hover:bg-purple-100 text-purple-800 text-[11px] font-semibold transition-colors cursor-pointer shadow-2xs shrink-0"
+              >
+                <RotateCcw className="w-2.5 h-2.5 text-purple-600" />
+                <span>Straighten All</span>
+              </button>
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
                 {activeEntry.stickers.map((stk) => {
                   const isSelected = selectedPlacementId === stk.id;
@@ -758,12 +827,26 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     >
                       <span className="text-base">{stk.emoji}</span>
                       <span className="text-[11px] max-w-[80px] truncate">{stk.name || 'Sticker'}</span>
+                      {stk.rotation !== 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStraightenSticker(stk.id);
+                          }}
+                          title="Straighten to 0°"
+                          className={`p-0.5 rounded hover:bg-black/10 transition-colors cursor-pointer ${
+                            isSelected ? 'text-emerald-200' : 'text-emerald-600 hover:text-emerald-700'
+                          }`}
+                        >
+                          <RotateCcw className="w-2.5 h-2.5" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRotateSticker(stk.id);
                         }}
-                        title="Rotate Sticker"
+                        title="Rotate (+90°)"
                         className={`p-0.5 rounded hover:bg-black/10 transition-colors cursor-pointer ${
                           isSelected ? 'text-white' : 'text-slate-400 hover:text-slate-700'
                         }`}
@@ -799,6 +882,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
           {/* Content Textarea */}
           <textarea
+            ref={textareaRef}
             value={activeEntry.content}
             onChange={(e) => updateField('content', e.target.value)}
             placeholder="Write your heart out... Gemini is ready whenever you want reflection, brainstorming, or a gentle conversation."
@@ -819,7 +903,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         </div>
 
         {/* Bottom Status Bar */}
-        <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 bg-slate-50/40 relative z-20">
+        <div className="px-6 py-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 bg-slate-50/40 relative z-20">
           <div className="flex items-center gap-3">
             <span>{wordCount} words</span>
             <span>•</span>
@@ -835,7 +919,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {isSaving ? (
               <span className="flex items-center gap-1 text-amber-600 font-medium">
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />

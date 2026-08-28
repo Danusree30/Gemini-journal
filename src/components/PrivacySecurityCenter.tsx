@@ -43,6 +43,7 @@ export const PrivacySecurityCenter: React.FC<PrivacySecurityCenterProps> = ({
   const [pinError, setPinError] = useState<string | null>(null);
   const [showDisableConfirm, setShowDisableConfirm] = useState(false);
   const [isDisablingPin, setIsDisablingPin] = useState(false);
+  const [showChangePin, setShowChangePin] = useState(false);
 
   // Backup restore state
   const [isExporting, setIsExporting] = useState(false);
@@ -77,10 +78,13 @@ export const PrivacySecurityCenter: React.FC<PrivacySecurityCenterProps> = ({
         codelockEnabled: true,
         codelockPinHash: hash,
         codelockSalt: salt,
+        historyPinLockEnabled: true,
+        autoLockHistoryOnLeave: true,
       });
-      setPinSuccess('PIN protection enabled successfully!');
+      setPinSuccess('PIN protection saved successfully!');
       setPinInput('');
       setConfirmPinInput('');
+      setShowChangePin(false);
       setTimeout(() => setPinSuccess(null), 3500);
     } catch (err: any) {
       setPinError('Failed to securely hash PIN. Please try again.');
@@ -234,15 +238,62 @@ export const PrivacySecurityCenter: React.FC<PrivacySecurityCenterProps> = ({
                       <div className="text-[11px] text-emerald-700">PBKDF2 SHA-256 salted hash protection</div>
                     </div>
                   </div>
-                  {!showDisableConfirm && (
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setShowDisableConfirm(true)}
-                      className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold transition-colors cursor-pointer"
+                      onClick={() => {
+                        setShowChangePin(!showChangePin);
+                        setShowDisableConfirm(false);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-bold transition-colors cursor-pointer"
                     >
-                      Disable PIN
+                      {showChangePin ? 'Cancel' : 'Change PIN'}
                     </button>
-                  )}
+                    {!showDisableConfirm && (
+                      <button
+                        onClick={() => {
+                          setShowDisableConfirm(true);
+                          setShowChangePin(false);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        Disable PIN
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {showChangePin && (
+                  <form onSubmit={handleSavePin} className="p-4 rounded-2xl bg-purple-50/60 border border-purple-200 animate-in fade-in space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-purple-900">Update Security PIN</span>
+                      <span className="text-[10px] text-purple-600">4-6 digits</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <input
+                        type="password"
+                        maxLength={6}
+                        value={pinInput}
+                        onChange={(e) => setPinInput(e.target.value)}
+                        placeholder="New PIN"
+                        className="p-2 text-xs bg-white border border-purple-200 rounded-xl focus:outline-none text-center tracking-widest font-mono text-slate-800"
+                      />
+                      <input
+                        type="password"
+                        maxLength={6}
+                        value={confirmPinInput}
+                        onChange={(e) => setConfirmPinInput(e.target.value)}
+                        placeholder="Confirm New PIN"
+                        className="p-2 text-xs bg-white border border-purple-200 rounded-xl focus:outline-none text-center tracking-widest font-mono text-slate-800"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition-transform hover:scale-101 cursor-pointer"
+                    >
+                      Save New PIN
+                    </button>
+                  </form>
+                )}
 
                 {showDisableConfirm && (
                   <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-300 animate-in fade-in space-y-2">
@@ -277,7 +328,7 @@ export const PrivacySecurityCenter: React.FC<PrivacySecurityCenterProps> = ({
             ) : (
               <form onSubmit={handleSavePin} className="space-y-3 mb-4">
                 <p className="text-xs text-slate-600">
-                  Set a 4-6 digit numeric PIN to lock your journal during inactivity:
+                  Set a 4-6 digit numeric PIN to lock your journal and history:
                 </p>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -307,13 +358,48 @@ export const PrivacySecurityCenter: React.FC<PrivacySecurityCenterProps> = ({
                   className="w-full py-2.5 rounded-xl text-white text-xs font-bold shadow-xs transition-transform hover:scale-101 cursor-pointer"
                   style={{ backgroundColor: palette.buttonPrimary }}
                 >
-                  Enable Codelock Protection
+                  Enable PIN Protection
                 </button>
               </form>
             )}
 
+            {/* History Page Lock Settings */}
+            <div className="space-y-2 pt-3 border-t border-slate-100 mb-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-purple-500" />
+                  Lock History Page with PIN
+                </span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.historyPinLockEnabled !== false}
+                    onChange={(e) => updateSettings({ historyPinLockEnabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-600 flex items-center gap-1.5 text-[11px]">
+                  <RefreshCw className="w-3 h-3 text-slate-400" />
+                  Auto-Relock History on Leave
+                </span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.autoLockHistoryOnLeave !== false}
+                    onChange={(e) => updateSettings({ autoLockHistoryOnLeave: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+            </div>
+
             {/* Auto-Lock Inactivity Timer Setting */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
               <span className="font-semibold text-slate-700 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-slate-400" />
                 Auto-Lock on Inactivity
